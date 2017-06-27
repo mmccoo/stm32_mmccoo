@@ -28,6 +28,8 @@ If you get this ```Info : stm32f1x.cpu: hardware has 6 breakpoints, 4 watchpoint
 ## ARM GNU toolchain (g++, gdb,...)
 
 Download the GNU toolchain from the [ARM download area](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads)
+# I imagine this link will change over time.
+# wget https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/6_1-2017q1/gcc-arm-none-eabi-6-2017-q1-update-linux.tar.bz2
 
 Untar it:
 ```tar -xf gcc-arm-none-eabi-6-2017-q1-update-linux.tar.bz2```

@@ -1,6 +1,6 @@
 
 
-BUILD_TOOLS_ROOT=~/Downloads/other/gcc-arm-none-eabi-6-2017-q1-update/bin
+BUILD_TOOLS_ROOT=~/Downloads/gcc-arm-none-eabi-6-2017-q1-update/bin
 ifeq (,$(wildcard $(BUILD_TOOLS_ROOT)))
 $(error Please set BUILD_TOOLS_ROOT to point to your copy of ARM gnu toolchain)
 endif

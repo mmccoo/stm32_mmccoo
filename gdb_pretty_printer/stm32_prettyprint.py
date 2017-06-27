@@ -151,22 +151,22 @@ RCC_CFGR = [
         (1, "PLL clock is not divided")
     ]),
     Field("PLLMUL", "21:18" , [
-        (0x0000, "PLL input clock x 2"),
-        (0x0001, "PLL input clock x 3"),
-        (0x0010, "PLL input clock x 4"),
-        (0x0011, "PLL input clock x 5"),
-        (0x0100, "PLL input clock x 6"),
-        (0x0101, "PLL input clock x 7"),
-        (0x0110, "PLL input clock x 8"),
-        (0x0111, "PLL input clock x 9"),
-        (0x1000, "PLL input clock x 10"),
-        (0x1001, "PLL input clock x 11"),
-        (0x1010, "PLL input clock x 12"),
-        (0x1011, "PLL input clock x 13"),
-        (0x1100, "PLL input clock x 14"),
-        (0x1101, "PLL input clock x 15"),
-        (0x1110, "PLL input clock x 16"),
-        (0x1111, "PLL input clock x 16")
+        (0b0000, "PLL input clock x 2"),
+        (0b0001, "PLL input clock x 3"),
+        (0b0010, "PLL input clock x 4"),
+        (0b0011, "PLL input clock x 5"),
+        (0b0100, "PLL input clock x 6"),
+        (0b0101, "PLL input clock x 7"),
+        (0b0110, "PLL input clock x 8"),
+        (0b0111, "PLL input clock x 9"),
+        (0b1000, "PLL input clock x 10"),
+        (0b1001, "PLL input clock x 11"),
+        (0b1010, "PLL input clock x 12"),
+        (0b1011, "PLL input clock x 13"),
+        (0b1100, "PLL input clock x 14"),
+        (0b1101, "PLL input clock x 15"),
+        (0b1110, "PLL input clock x 16"),
+        (0b1111, "PLL input clock x 16")
     ]),
     Field("PLLXTPRE", 17, [
         (0, "HSE clock not divided"),
@@ -738,7 +738,52 @@ RCC_CSR = [
     ])
 ]
 
+PWR_CR = [
+    # 9-31 reserved
+    Field("DBO", 8, [
+        (0, "Access to RTC and Backup registers disabled"),
+        (1, "Access to RTC and backup registers enabled")
+    ]),
+    Field("PLS", "7:5", [
+        (0b000, "2.2V"),
+        (0b000, "2.3V"),
+        (0b000, "2.4V"),
+        (0b000, "2.5V"),
+        (0b000, "2.6V"),
+        (0b000, "2.7V"),
+        (0b000, "2.8V"),
+        (0b000, "2.9V")
+    ]),
+    Field("PVDE", 4, [
+        (0, "PVD disabled"),
+        (1, "PVD enabled")
+    ]),
+    # CSBG is rc_w1 to clear a flag. no sense in displaying it.
+    # CSBF is also a clear flag.
+    # PDDS enter deep sleep. If we're sleeping, can we read this?
+    # LPDS also low power sleep
+]
 
+PWR_CSR = [
+    # 9-31 reserved.
+    Field("EWUP", 8, [
+        (0, "WKUP pin is used for gpio. no wakeup"),
+        (1, "WKUP pin is used for wakeup.")
+    ]),
+    # 3-7 reserved
+    Field("PVDO", 2, [
+        (0, "VDD/VDDA is higher than the PVD threshold selected with the PLS[2:0] bits."),
+        (1, "VDD/VDDA is lower than the PVD threshold selected with the PLS[2:0] bits.")
+    ]),
+    Field("SBF", 1, [
+        (0, "Device has not been in standby mode"),
+        (1, "Device has been in standby mode")
+    ]),
+    Field("WUF", 1, [
+        (0, "No wakeup event occurred"),
+        (1, "A wakeup event was received from WKUP pin or RTC alarm")
+    ])
+]
 
 class RegStructPrinter(object):
     def __init__(self, name, val, regs):
@@ -859,6 +904,14 @@ def stm32_lookup_function(val):
             ('BDCR', RCC_BDCR),
             ('CSR', RCC_CSR)
             ])
+
+    regex = re.compile("^PWR_TypeDef$")
+    if regex.match(typename):
+        return RegStructPrinter("PWR", val, [
+            ('CR', PWR_CR),
+            ('CSR', PWR_CSR)
+            ])
+    
     return None
 
 def register_printers(obj):
