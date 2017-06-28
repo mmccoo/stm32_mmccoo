@@ -1,0 +1,32 @@
+BUILD_TOOLS_ROOT=/bubba/electronicsDS/stm32/gcc/gcc-arm-none-eabi-6-2017-q1-update/bin
+ifeq (,$(wildcard $(BUILD_TOOLS_ROOT)))
+$(error Please set BUILD_TOOLS_ROOT, in ../Make.common, to point to your copy of ARM gnu toolchain)
+endif
+
+FLAGS=-mcpu=cortex-m3 -mthumb -mfloat-abi=soft
+CFLAGS='-D__weak=__attribute__((weak))' '-D__packed="__attribute__((__packed__))"' -DSTM32F103xB
+CFLAGS+=-Og -g3
+# report all warnings. unlimited message length per line. put each function into its
+# own section.
+CFLAGS+=-Wall -fmessage-length=0 -ffunction-sections 
+
+# generate .d dependencies. MMD is only list user includes; no system files.
+# MP is to add phony dependcencies. helps if you remove a file.
+# -MMD -MP -MF"Src/main.d" -MT"Src/main.o"
+
+VPATH += startup
+build/%.o: %.s
+	mkdir -p build
+	$(BUILD_TOOLS_ROOT)/arm-none-eabi-as $(FLAGS) -g -o $@ $^
+
+VPATH += Src
+build/%.o: %.c
+	mkdir -p build
+	$(BUILD_TOOLS_ROOT)/arm-none-eabi-gcc $(FLAGS) $(CFLAGS) $(CINCLUDE) -c -o $@ $^
+
+
+clean:
+	rm -rf build *.elf
+vars:
+	@echo soruces $(SOURCES)
+	@echo object  $(OBJECTS)
