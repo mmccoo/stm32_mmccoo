@@ -32,9 +32,10 @@
 *.dSYM/
 *.su
 
-*/openocd.log
-*/output.map
+**/openocd.log
+**/output.map
 
 **#*
 **~
+**/build
 

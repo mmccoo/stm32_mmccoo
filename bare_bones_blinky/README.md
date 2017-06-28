@@ -47,7 +47,8 @@ This should yield the file bareblink.elf
 
 In this directory, there is a .gdbinit file. Upon invocation of gdb, it'll load your elf file onto your BluePill/STM32 board.
 
-```~/Downloads/gcc-arm-none-eabi-6-2017-q1-update/bin/arm-none-eabi-gdb-py```
+Assuming you installed the gcc/gdb stuff in ARM_GCC
+```$ARM_GCC/arm-none-eabi-gdb-py```
 
 Make sure you're running the ARM version of gdb. You may also have linux gdb on your system, which won't work.
 
