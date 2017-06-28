@@ -56,6 +56,7 @@ void PendSV_Handler(void);
 void SysTick_Handler(void);
 void DMA1_Channel4_IRQHandler(void);
 void DMA1_Channel5_IRQHandler(void);
+void USART1_IRQHandler(void);
 
 #ifdef __cplusplus
 }

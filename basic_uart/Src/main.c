@@ -70,6 +70,16 @@ void delayLoop() {
         }
 }
 
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  HAL_UART_StateTypeDef state = HAL_UART_GetState(huart);
+  if (state == HAL_UART_STATE_READY) {
+
+  } else {
+
+  }
+}
+
 /* USER CODE END 0 */
 
 int main(void)
@@ -102,10 +112,15 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
   uint8_t themessage[] = "E.T. is phoning home. Anyone there?\n";
+  uint8_t theothermessage[] = "Hey. I hate to interrupt, but...\n";
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  //hdma_usart1_rx.XferCpltCallback = UART_Done;
+
+  uint8_t poll = 1;
   while (1)
   {
   /* USER CODE END WHILE */
@@ -114,7 +129,14 @@ int main(void)
 
     HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
     if (state == HAL_UART_STATE_READY) {
-      HAL_StatusTypeDef tstate = HAL_UART_Transmit(&huart1, themessage, sizeof(themessage), HAL_MAX_DELAY);
+      
+      HAL_StatusTypeDef tstate;
+      if (poll) {
+        tstate = HAL_UART_Transmit(&huart1, themessage, sizeof(themessage), HAL_MAX_DELAY);
+      } else {
+        tstate = HAL_UART_Transmit_IT(&huart1, theothermessage, sizeof(theothermessage)); 
+      }
+      poll = !poll;
       state = HAL_UART_GetState(&huart1);
     }
 
