@@ -785,6 +785,109 @@ PWR_CSR = [
     ])
 ]
 
+I2C_CR1 = [
+    Field("SWRST", 15, [
+        (0, "I2C not under reset"),
+        (1, "I2C under reset")
+    ]),
+    # 14 reserved
+    Field("ALERT", 13, [
+        (0, "Release SMBA pin high. Alert Response Address Header followed by NACK"),
+        (1, "Release SMBA pin low. Alert Response Address Header followed by ACK")
+    ]),
+    Field("PEC", 12, [
+        (0, "No PEC transfer"),
+        (1, "PEC transfer")
+    ]),
+    Field("POS", 11, [
+        (0, "ACK bit controls the (N)ACK of the current byte"),
+        (1, "ACK bit controls the (N)ACK of the next byte.")
+    ]),
+    Field("ACK", 10, [
+        (0, "No acknowledge returned"),
+        (1, "Acknowledge returned after is received")
+    ]),
+    Field("STOP", 9, [
+        (0, "No stop generation"),
+        (1, "Stop generation or release SCL,SDAafter current byte ")
+    ]),
+    # this is incomplete. Just didn't get to finishing it yet.
+    Field("START", 8  , [
+        (0, ""),
+        (1, "")
+    ])
+]
+
+
+I2C_SR1 = [
+    Field("SMBALERT", 15, [
+        (0, "no SMB alert"),
+        (1, "SMB alert occurred")
+    ]),
+    Field("TIMEOUT", 14, [
+        (0, "no timeout error"),
+        (1, "SCL remained low for 25ms")
+    ]),
+    # 13 reserved
+    Field("PECERROR", 12  , [
+        (0, "no PEC error"),
+        (1, "PEC error")
+    ]),
+    Field("OVR", 11, [
+        (0, "no overrun"),
+        (1, "over/underrun")
+    ]),
+    Field("AF", 10, [
+        (0, "no acknoweledge failure"),
+        (1, "acknoweledge failure")
+    ]),
+    Field("START", 9, [
+        (0, "No arbitration lost detected"),
+        (1, "arbitration lost detected")
+    ]),
+    Field("BERR", 8, [
+        (0, "no misplaced start or stop"),
+        (1, "misplaced start or stop")
+    ]),
+    Field("TxE", 7, [
+        (0, "Data register not empty"),
+        (1, "Data register empty")
+    ]),
+    Field("RxNE", 6, [
+        (0, "Data register empty"),
+        (1, "Data register not empty")
+    ]),
+    # 5 reserved
+    Field("STOPF", 4, [
+        (0, "no stop condition detected"),
+        (1, "stop condition detected.")
+    ]),
+    Field("ADD10", 3, [
+        (0, "no ADD10 event occurred"),
+        (1, "Master has sent first address byte (header)")
+    ]),
+    Field("BTF", 2, [
+        (0, "Data byte transfer not done"),
+        (1, "Data byte transfer succeeded")
+    ]),
+    Field("ADDR", 1, [
+        (0, "Address mitmatched or not received."),
+        (1, "Received address matched")
+    ]),
+    Field("SB", 0, [
+        (0, "No start condition"),
+        (1, "Start condition generated")
+    ])
+]
+
+
+
+
+
+
+    
+
+
 class RegStructPrinter(object):
     def __init__(self, name, val, regs):
         self.name = name
@@ -911,6 +1014,13 @@ def stm32_lookup_function(val):
             ('CR', PWR_CR),
             ('CSR', PWR_CSR)
             ])
+
+    regex = re.compile("^I2C_TypeDef$")
+    if regex.match(typename):
+        return RegStructPrinter("I2C", val, [
+            ('CR1', I2C_CR1),
+            ('SR1', I2C_SR1)
+        ])
     
     return None
 
