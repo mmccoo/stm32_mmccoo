@@ -22,7 +22,8 @@ TARGET = uart_spi_iic
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Og
+OPT =
+#-Og
 
 
 #######################################
@@ -73,7 +74,8 @@ Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c \
 Src/dma.c \
 Src/i2c.c \
 Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_i2c.c \
-Src/OLED.c
+Src/OLED.c \
+$(wildcard u8g2/Src/*.c)
 
 # ASM sources
 ASM_SOURCES =  \
@@ -133,7 +135,8 @@ C_INCLUDES =  \
 -IDrivers/STM32F1xx_HAL_Driver/Inc \
 -IDrivers/STM32F1xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32F1xx/Include \
--IDrivers/CMSIS/Include
+-IDrivers/CMSIS/Include \
+-Iu8g2/Inc
 
 
 # compile gcc flags

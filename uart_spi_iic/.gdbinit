@@ -14,11 +14,20 @@ import stm32_prettyprint
 stm32_prettyprint.register_printers(None)
 end
 
+define restart
+  monitor reset halt
+end
+
+define reload
 monitor reset halt
 monitor stm32f1x mass_erase 0
 monitor program build/uart_spi_iic.elf verify
 monitor reset halt
+end
+
+reload
 break main
 #break Src/stm32f1xx_hal_i2c.c:340
-
+#break u8x8_gpio_and_delay_mine
+#break u8x8_byte_my_hw_i2c
 continue

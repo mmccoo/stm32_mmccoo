@@ -245,10 +245,10 @@ void OLED_Fill(unsigned char fill_Data)//È«ÆÁÌî³ä
 void InitOled(void)
 {
 	WriteOledCmd(0xAE); //display off
-	WriteOledCmd(0x20);	//Set Memory Addressing Mode
-	WriteOledCmd(0x10);	//00,Horizontal Addressing Mode;01,Vertical Addressing Mode;10,Page Addressing Mode (RESET);11,Invalid
-	WriteOledCmd(0xb0);	//Set Page Start Address for Page Addressing Mode,0-7
-	WriteOledCmd(0xc8);	//Set COM Output Scan Direction
+	WriteOledCmd(0x20); //Set Memory Addressing Mode
+	WriteOledCmd(0x10); //00,Horizontal Addressing Mode;01,Vertical Addressing Mode;10,Page Addressing Mode (RESET);11,Invalid
+	WriteOledCmd(0xb0); //Set Page Start Address for Page Addressing Mode,0-7
+	WriteOledCmd(0xc8); //Set COM Output Scan Direction
 	WriteOledCmd(0x00); //---set low column address
 	WriteOledCmd(0x10); //---set high column address
 	WriteOledCmd(0x40); //--set start line address
