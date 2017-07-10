@@ -38,7 +38,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_hal.h"
-#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -107,7 +106,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_USART1_UART_Init();
 
   /* USER CODE BEGIN 2 */
@@ -117,16 +115,12 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-  //hdma_usart1_rx.XferCpltCallback = UART_Done;
-
   uint8_t poll = 1;
   while (1)
   {
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-
     HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
     if (state == HAL_UART_STATE_READY) {
       
