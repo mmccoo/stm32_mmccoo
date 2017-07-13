@@ -38,6 +38,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_hal.h"
+#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -89,12 +90,25 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
   }
 }
 
+
+uint8_t num_rx_rounds = 0;
+const uint8_t use_dma = 1;
+
 void HAL_UART_RxCpltCallback (UART_HandleTypeDef *huart)
 {
-  __attribute__((unused)) HAL_StatusTypeDef state;
-  // -3 because of \n \r and 0x0 to end the string
-  state = HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
+  num_rx_rounds++;
+
+  if (use_dma) {
+    // don't need to do anything. DMA is circular
+  } else {
+    __attribute__((unused)) HAL_StatusTypeDef state;
+  
+    // -3 because of \n \r and 0x0 to end the string
+    state = HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
+  }
 }
+
+
 
 /* USER CODE END 0 */
 
@@ -123,14 +137,19 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART1_UART_Init();
 
   /* USER CODE BEGIN 2 */
   uint8_t themessage[]      = "E.T. is phoning home. Anyone there? received xxx\r\n";
   uint8_t theothermessage[] = "Hey. I hate to interrupt, but...received     xxx\r\n";
+  
 
-  HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
-
+  if (use_dma) {
+    HAL_UART_Receive_DMA(&huart1, received, sizeof(received)-3);
+  } else {
+    HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
+  }
   
   /* USER CODE END 2 */
 
