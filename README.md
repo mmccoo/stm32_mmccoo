@@ -36,3 +36,20 @@ $1 = RCC: = {
 contains a blinky program that requires only:
 - The [ARM gcc tools](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm)
 - [OpenOcd](http://openocd.org/)
+
+## blinky
+A simple program to blink the LED. Unlike barebone blinky, this one uses the hardware abstraction layer provided by ST. Additionally, I used STMCubeMX to generate much of it.
+
+## basic_uart
+This builds on blinky by adding UART capabilities. It sends messages that can be received in a terminal window via a cheap ftdi adapter (also <$2 on AliExpress). It also echos back to you whatever you type in the terminal.
+
+## uart_and_spi
+While uart enables you to talk to your device, you probably want it to talk to other electronic components. SPI is a common way to talk to other devices.
+This example demonstrates how to send SPI messages.
+
+## uart_spi_iic
+In addition to SPI, I2C is another common way to interface with electronic devices.
+
+
+## uart_spi_usb
+If you don't want to be dependent on a FTDI adapter, the blue pill module does have a usb port you can use.
