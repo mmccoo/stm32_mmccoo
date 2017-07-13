@@ -49,6 +49,7 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+uint8_t received[] = "          \n\r";
 
 /* USER CODE END PV */
 
@@ -69,6 +70,15 @@ void delayLoop() {
         }
 }
 
+void btoa(uint8_t i, uint8_t *str)
+{  
+  str[2] = '0' + i%10;
+  str[1] = '0' + (i/10)%10;
+  str[0] = '0' + (i/100)%10; 
+}
+
+
+// to talk to UART minicom --baudrate 115200 --device /dev/ttyUSB0 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
   HAL_UART_StateTypeDef state = HAL_UART_GetState(huart);
@@ -77,6 +87,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
   } else {
 
   }
+}
+
+void HAL_UART_RxCpltCallback (UART_HandleTypeDef *huart)
+{
+  __attribute__((unused)) HAL_StatusTypeDef state;
+  // -3 because of \n \r and 0x0 to end the string
+  state = HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
 }
 
 /* USER CODE END 0 */
@@ -109,39 +126,48 @@ int main(void)
   MX_USART1_UART_Init();
 
   /* USER CODE BEGIN 2 */
-  uint8_t themessage[] = "E.T. is phoning home. Anyone there?\n";
-  uint8_t theothermessage[] = "Hey. I hate to interrupt, but...\n";
+  uint8_t themessage[]      = "E.T. is phoning home. Anyone there? received xxx\r\n";
+  uint8_t theothermessage[] = "Hey. I hate to interrupt, but...received     xxx\r\n";
+
+  HAL_UART_Receive_IT(&huart1, received, sizeof(received)-3);
+
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   uint8_t poll = 1;
+  uint8_t lighton = 0;
   while (1)
   {
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-    HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
-    if (state == HAL_UART_STATE_READY) {
+    if ((HAL_GetTick() % 1000) == 0) {
+      HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
+      if (state == HAL_UART_STATE_READY ||
+          state == HAL_UART_STATE_BUSY_RX) {
       
-      HAL_StatusTypeDef tstate;
-      if (poll) {
-        tstate = HAL_UART_Transmit(&huart1, themessage, sizeof(themessage), HAL_MAX_DELAY);
-      } else {
-        tstate = HAL_UART_Transmit_IT(&huart1, theothermessage, sizeof(theothermessage)); 
+        __attribute__((unused)) HAL_StatusTypeDef tstate;
+        if (poll) {
+          btoa(huart1.RxXferCount, themessage+45);
+          tstate = HAL_UART_Transmit(&huart1, themessage, sizeof(themessage), HAL_MAX_DELAY);
+          tstate = HAL_UART_Transmit(&huart1, received, sizeof(received), HAL_MAX_DELAY);
+        } else {
+          btoa(huart1.RxXferCount, theothermessage+45);
+          tstate = HAL_UART_Transmit_IT(&huart1, theothermessage, sizeof(theothermessage)); 
+        }
+        poll = !poll;
+        state = HAL_UART_GetState(&huart1);
       }
-      poll = !poll;
-      state = HAL_UART_GetState(&huart1);
+
+      lighton = !lighton;
+      if (lighton) {
+        GPIOC->ODR |= GPIO_PIN_13;
+      } else {
+        GPIOC->ODR &= ~(GPIO_PIN_13);
+      }
     }
-
-
-    
-    GPIOC->ODR |= GPIO_PIN_13;
-    delayLoop();
-    delayLoop();
-    GPIOC->ODR &= ~(GPIO_PIN_13);
-    delayLoop();
-
   }
   /* USER CODE END 3 */
 
