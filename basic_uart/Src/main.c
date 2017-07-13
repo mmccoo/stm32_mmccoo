@@ -51,6 +51,9 @@
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 uint8_t received[] = "          \n\r";
+uint8_t num_rx_rounds = 0;
+const uint8_t use_dma = 1;
+
 
 /* USER CODE END PV */
 
@@ -89,10 +92,6 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
   }
 }
-
-
-uint8_t num_rx_rounds = 0;
-const uint8_t use_dma = 1;
 
 void HAL_UART_RxCpltCallback (UART_HandleTypeDef *huart)
 {
