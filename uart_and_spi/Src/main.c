@@ -128,6 +128,7 @@ int main(void)
   uint8_t themessage[] = "E.T. is phoning home. Anyone there? Be sure to check spi\n";
   uint8_t theothermessage[] = "Hey. I hate to interrupt, but...\n";
   uint8_t spimessage[] = "This is a secret side message over spi\n";
+  uint8_t spimessageit[] = "This time the spi message was send via IT\n";
    
   /* USER CODE END 2 */
 
@@ -135,11 +136,17 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   uint8_t uart_poll = 1;
   uint8_t spi_poll = 1;
+  uint32_t lasttime = 0;
   while (1)
   {
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
+    uint32_t curtime = HAL_GetTick();
+    if (((curtime % 1000) != 0) || (curtime == lasttime)) {
+      continue;
+    }
+    lasttime = curtime;
     
     HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
     if (state == HAL_UART_STATE_READY) {
@@ -157,7 +164,9 @@ int main(void)
     if (spistate == HAL_SPI_STATE_READY) {
       HAL_StatusTypeDef hstatus __attribute__ ((unused));
       if (spi_poll) {
-        hstatus = HAL_SPI_Transmit (&hspi1, spimessage, sizeof(spimessage), HAL_MAX_DELAY);
+        hstatus = HAL_SPI_Transmit(&hspi1, spimessage, sizeof(spimessage), HAL_MAX_DELAY);
+      } else {
+        hstatus = HAL_SPI_Transmit_IT(&hspi1, spimessageit, sizeof(spimessageit));
       }
       spi_poll = !spi_poll;
       spistate =  HAL_SPI_GetState (&hspi1);
