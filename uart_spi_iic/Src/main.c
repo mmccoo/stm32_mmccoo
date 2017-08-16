@@ -43,10 +43,11 @@
 #include "spi.h"
 #include "usart.h"
 #include "gpio.h"
-#include "OLED.h"
-#include "u8g2.h"
 
 /* USER CODE BEGIN Includes */
+
+#include "OLED.h"
+#include "u8g2.h"
 
 /* USER CODE END Includes */
 
@@ -215,6 +216,22 @@ void byte_at_string(uint8_t *str, int i)
   str[0] = '0' + (i/100)%10;
   
 }
+void btoa(uint8_t i, uint8_t *str)
+{  
+  str[2] = '0' + i%10;
+  str[1] = '0' + (i/10)%10;
+  str[0] = '0' + (i/100)%10; 
+}
+
+void itoa(uint32_t i, uint8_t *str)
+{  
+  str[4] = '0' + i%10;
+  str[3] = '0' + (i/10)%10;
+  str[2] = '0' + (i/100)%10;
+  str[1] = '0' + (i/1000)%10;
+  str[0] = '0' + (i/10000)%10; 
+}
+
 
 void hex_at_string(uint8_t *str, int i)
 {
@@ -252,7 +269,10 @@ void sendUARTmsgPoll(uint8_t *msg, uint16_t length) {
 
 }
 
+
+uint32_t amountsent =0;
 //extern "C"
+
 uint8_t
 u8x8_byte_my_hw_i2c(
   U8X8_UNUSED u8x8_t *u8x8,
@@ -311,11 +331,13 @@ u8x8_byte_my_hw_i2c(
     break;
   }
   case U8X8_MSG_BYTE_END_TRANSFER: {
-    UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_END\n";
+    UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_END xxxxx\n";
+    itoa(length, umsg+13);
     //sendUARTmsgPoll(umsg, sizeof(umsg));
     while(HAL_I2C_GetState (&hi2c1) != HAL_I2C_STATE_READY) { /* empty */ }
     const uint8_t addr = 0x78;
-    HAL_I2C_Master_Transmit(&hi2c1, addr, vals, length, 10);    
+    HAL_I2C_Master_Transmit(&hi2c1, addr, vals, length, 10);
+    amountsent+= length;
     break;
   }
   default: {
@@ -433,17 +455,11 @@ int main(void)
   MX_SPI1_Init();
   MX_I2C1_Init();
 
-  // this was a short attempt to reset i2c busy issue. it didn't work.
-  // I probably just didn't take it far enough. "for now", will just
-  // make sure I2C clock is enabled before the rest of i2c. The boot issue
-  // is what I'm trying to solve today and I just want to go on.
-  //SET_BIT(hi2c1.Instance->CR1, I2C_CR1_SWRST);
-  //HAL_I2C_Init(&hi2c1);
-  
   /* USER CODE BEGIN 2 */
   UNUSEDVAR uint8_t themessage[] = "E.T. is phoning home. Anyone there? Be sure to check spi\n";
   UNUSEDVAR uint8_t theothermessage[] = "Hey. I hate to interrupt, but...\n";
   UNUSEDVAR uint8_t spimessage[] = "This is a secret side message over spi\n";
+  UNUSEDVAR uint8_t elapsedmessage[] = "time elapsed to draw xxx xxxxx xxx\n";
   
   /* USER CODE END 2 */
 
@@ -453,7 +469,7 @@ int main(void)
   UNUSEDVAR uint8_t spi_poll = 1;
   //uint8_t text_size = 0;
 
-  u8g2_Setup_ssd1306_i2c_128x64_noname_f(&u8g2,
+  u8g2_Setup_ssd1306_i2c_128x64_noname_1(&u8g2,
                                          U8G2_R0,
                                          u8x8_byte_my_hw_i2c,
                                          u8x8_gpio_and_delay_mine);
@@ -478,48 +494,49 @@ int main(void)
   //u8g2_FirstPage(&u8g2);
   //do {
   //u8g2_DrawBox(&u8g2, 10,20, 20, 30);
-    u8g2_SetFont(&u8g2, u8g2_font_ncenB14_tr);
-    //u8g2_DrawStr(&u8g2, 0,15,"This World!");
-    //u8g2_DrawStr(&u8g2, 0,30,"Other World!");
-    //u8g2_DrawXBM(&u8g2, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
-    u8g2_SetDrawColor(&u8g2, 0);
-    u8g2_DrawXBM(&u8g2, 0, 0, lydia_width, lydia_height, lydia_bits);
-    u8g2_DrawXBM(&u8g2, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
+  u8g2_SetFont(&u8g2, u8g2_font_ncenB14_tr);
+  //u8g2_DrawStr(&u8g2, 0,15,"This World!");
+  //u8g2_DrawStr(&u8g2, 0,30,"Other World!");
+  //u8g2_DrawXBM(&u8g2, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
+  u8g2_SetDrawColor(&u8g2, 0);
+  u8g2_DrawXBM(&u8g2, 0, 0, lydia_width, lydia_height, lydia_bits);
+  u8g2_DrawXBM(&u8g2, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
 #endif
 
 #if 0
-    u8g2_SetFontMode(&u8g2, 1);	// Transparent
-    u8g2_SetFontDirection(&u8g2, 0);
-    u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
-    u8g2_DrawStr(&u8g2, 0, 30, "U");
+  u8g2_SetFontMode(&u8g2, 1);	// Transparent
+  u8g2_SetFontDirection(&u8g2, 0);
+  u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
+  u8g2_DrawStr(&u8g2, 0, 30, "U");
     
-    u8g2_SetFontDirection(&u8g2, 1);
-    u8g2_SetFont(&u8g2, u8g2_font_inb30_mn);
-    u8g2_DrawStr(&u8g2, 21,8,"8");
+  u8g2_SetFontDirection(&u8g2, 1);
+  u8g2_SetFont(&u8g2, u8g2_font_inb30_mn);
+  u8g2_DrawStr(&u8g2, 21,8,"8");
         
-    u8g2_SetFontDirection(&u8g2, 0);
-    u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
-    u8g2_DrawStr(&u8g2, 51,30,"g");
-    u8g2_DrawStr(&u8g2, 67,30,"\xb2");
+  u8g2_SetFontDirection(&u8g2, 0);
+  u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
+  u8g2_DrawStr(&u8g2, 51,30,"g");
+  u8g2_DrawStr(&u8g2, 67,30,"\xb2");
     
-    u8g2_DrawHLine(&u8g2, 2, 35, 47);
-    u8g2_DrawHLine(&u8g2, 3, 36, 47);
-    u8g2_DrawVLine(&u8g2, 45, 32, 12);
-    u8g2_DrawVLine(&u8g2, 46, 33, 12);
+  u8g2_DrawHLine(&u8g2, 2, 35, 47);
+  u8g2_DrawHLine(&u8g2, 3, 36, 47);
+  u8g2_DrawVLine(&u8g2, 45, 32, 12);
+  u8g2_DrawVLine(&u8g2, 46, 33, 12);
   
-    u8g2_SetFont(&u8g2, u8g2_font_4x6_tr);
-    u8g2_DrawStr(&u8g2, 1,54,"github.com/olikraus/u8g2");
+  u8g2_SetFont(&u8g2, u8g2_font_4x6_tr);
+  u8g2_DrawStr(&u8g2, 1,54,"github.com/olikraus/u8g2");
 #endif
     
-    u8g2_SendBuffer(&u8g2);
-    //} while ( u8g2_NextPage(&u8g2) );
+  u8g2_SendBuffer(&u8g2);
+  //} while ( u8g2_NextPage(&u8g2) );
 
-    UNUSEDVAR uint32_t myfreq = HAL_RCC_GetSysClockFreq();
-    UNUSEDVAR uint32_t mysize = * (uint32_t*) FLASHSIZE_BASE;
-    UNUSEDVAR uint32_t myid   = * (uint32_t*) UID_BASE;
+  UNUSEDVAR uint32_t myfreq = HAL_RCC_GetSysClockFreq();
+  UNUSEDVAR uint32_t mysize = * (uint32_t*) FLASHSIZE_BASE;
+  UNUSEDVAR uint32_t myid   = * (uint32_t*) UID_BASE;
   
   //InitOled();
   //OLED_Fill(0);
+  uint8_t lasttime = 0;
   while (1)
   {
   /* USER CODE END WHILE */
@@ -528,7 +545,42 @@ int main(void)
     // p HAL_I2C_GetState (&hi2c1)
     // p __HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY)
 
+    uint32_t curtime = HAL_GetTick();
 
+    //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
+
+    u8g2_ClearBuffer(&u8g2);
+    u8g2_FirstPage(&u8g2);
+    UNUSEDVAR uint32_t cleartime = HAL_GetTick();
+
+    u8g2_SetDrawColor(&u8g2, 1);
+    u8g2_SetFontMode(&u8g2, 1);	// Transparent
+    u8g2_SetFontDirection(&u8g2, 0);
+    u8g2_SetFont(&u8g2, u8g2_font_inb16_mf);
+    char time[] = "xxxxx";
+    itoa(curtime,(uint8_t*) time);
+
+    amountsent=0;
+    uint8_t pages = 2;
+    do {
+      u8g2_DrawStr(&u8g2, 0, 16, time);
+      //NextPage calls SendBuffer
+      //u8g2_SendBuffer(&u8g2);
+      pages--;
+    } while (u8g2_NextPage(&u8g2) && pages>0);
+    UNUSEDVAR uint32_t finaltime = HAL_GetTick();
+    UNUSEDVAR uint32_t elapsed =  finaltime-curtime;
+    if (HAL_UART_GetState(&huart1) == HAL_UART_STATE_READY) {
+      btoa(elapsed, elapsedmessage+21);
+      itoa(amountsent,  elapsedmessage+25);
+      HAL_UART_Transmit_IT(&huart1, elapsedmessage, sizeof(elapsedmessage));
+    };
+    
+    if (((curtime % 1000) != 0) || (curtime == lasttime)) {
+      continue;
+    }
+    lasttime = curtime;
+    
     HAL_I2C_StateTypeDef iicstate =  HAL_I2C_GetState (&hi2c1);
     HAL_UART_StateTypeDef uartstate = HAL_UART_GetState(&huart1);
     if ((iicstate  == HAL_I2C_STATE_READY) &&
@@ -555,9 +607,9 @@ int main(void)
         }
       }
 #endif
-      
-      //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
+            
     }
+
     
 #if 0
     if (uartstate == HAL_UART_STATE_READY) {

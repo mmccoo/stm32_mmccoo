@@ -1,3 +1,6 @@
+#export GDBEXEC=/bubba/electronicsDS/stm32/gcc/gcc-arm-none-eabi-6-2017-q1-update/bin/arm-none-eabi-gdb-py
+#export OPENOCD=/bubba/electronicsDS/stm32/openocd-0.10.0/install
+
 file build/uart_spi_usb.elf
 target remote | $OPENOCD/bin/openocd -f $OPENOCD/share/openocd/scripts/interface/stlink-v2.cfg -f $OPENOCD/share/openocd/scripts/target/stm32f1x.cfg -c "gdb_port pipe; log_output openocd.log"
 
