@@ -52,23 +52,70 @@
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
+#include <utility>
 
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-uint8_t received[] = "                                                                                            \n\r";
-uint8_t tosend[512];
-uint32_t tosend_begin = 0;
-uint32_t tosend_end = 0;
-uint8_t saved[4096];
-uint32_t numsaved=0;
 
-uint8_t num_rx_rounds = 0;
+
+
+struct Queue {
+  uint8_t  tosend[512];
+  uint32_t tosend_begin;
+  uint32_t tosend_end;
+  uint8_t  num_rounds;
+  Queue() {
+    tosend_begin = 0;
+    tosend_end   = 0;
+    num_rounds   = 0;
+  };
+
+  void enqueue(uint8_t *data, uint32_t length) {
+    for(uint32_t i=0; i<length; i++) {
+      tosend[tosend_end] = data[i];
+      tosend_end++;
+      if (tosend_end>=sizeof(tosend)) {
+        tosend_end = 0;
+      }
+      tosend[tosend_end] = 0;
+    }    
+  }
+
+  std::pair<uint8_t*, uint32_t> dequeue() {
+    // enqueue may move uart_tosend_end forward. Since it's called
+    // from an interrupt, it needs to be treated a volatile.
+    // uart_tosend_begin is also changed here.
+    uint32_t end = tosend_end;
+    if (tosend_begin == end) {
+      return std::make_pair(tosend+tosend_begin, 0);
+    }
+    if (tosend_begin < end) {
+      // begin is before end. haven't wrapped.
+      // need to capture the current value of tosend_begin before changing it.
+      std::pair<uint8_t*, uint32_t> retval =
+        std::make_pair(tosend+tosend_begin, end-tosend_begin);
+      tosend_begin = end;
+      return retval;
+    }
+
+    // wrapping.
+    std::pair<uint8_t*, uint32_t> retval =
+      std::make_pair(tosend+tosend_begin, sizeof(tosend)-tosend_begin);
+    tosend_begin = 0;
+    return retval;
+  }
+};
+
+Queue uart_queue;
+Queue usb_queue;
+Queue uart_rx_queue;
 
 /* USER CODE END PV */
 
@@ -83,61 +130,48 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 
 
-void UART_send_from_buffer()
+void UART_send_from_buffer(Queue &queue)
 {
-  if (tosend_begin == tosend_end) { return; }
 
   HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
   if (state != HAL_UART_STATE_READY  &&
       state != HAL_UART_STATE_BUSY_RX) { return; }
-  
-  uint32_t end = tosend_end;
-  if (tosend_begin < end) {
-    // begin is before end. haven't wrapped.
-    HAL_UART_Transmit_DMA(&huart1, tosend+tosend_begin, end-tosend_begin);
-    tosend_begin = end;
-  } else {
-    // wrapping.
-    HAL_UART_Transmit_DMA(&huart1, tosend+tosend_begin, sizeof(tosend)-tosend_begin);
-    tosend_begin = 0;
-  }
+
+  auto deq = queue.dequeue();
+  if (deq.second == 0) { return; }
+
+  HAL_UART_Transmit_DMA(&huart1, deq.first, deq.second);
 
 }
 
-void enqueue(uint8_t *data, uint32_t length)
-{
-  for(int i=0; i<length; i++) {
-    tosend[tosend_end] = data[i];
-    saved[numsaved] = data[i];
-    tosend_end++;
-    numsaved++;
-    if (tosend_end>=sizeof(tosend)) {
-      tosend_end = 0;
-      tosend[tosend_end] = 'x';
-      tosend_end++;
-      saved[numsaved] = 'x';
-      numsaved++;
-    }
-    tosend[tosend_end] = 0;
-    saved[numsaved] = 0;
-  }
-
-}
 
 // from the terminal that I'm using, the data comes in two chunks
 // the first is the data to be send.
 // the second is a return and newline
 void SendUART(uint8_t *data, uint32_t length)
 {
-  enqueue(data, length);
+  uart_queue.enqueue(data, length);
   // don't need to add the newline stuff if the stuff we're echoing is
   // already newlined.
-  uint8_t extra[] = "x\n\r";
+  //uint8_t extra[] = "\n\r";
   // need the -1 because sizeof also needs the extra null termination.
-  enqueue(extra, sizeof(extra)-1);
+  //uart_queue.enqueue(extra, sizeof(extra)-1);
   
-  UART_send_from_buffer();
+  UART_send_from_buffer(uart_queue);
 
+}
+
+void ProcessReceivedUart()
+{
+  // see page 287 of RM0008
+  // CNDTR tells how much is left in the current DMA loop.
+  uart_rx_queue.tosend_end = sizeof(uart_rx_queue.tosend) - huart1.hdmarx->Instance->CNDTR;
+  
+  auto deq = uart_rx_queue.dequeue();
+
+  while(CDC_GetTxState()) { /* empty */ }
+  CDC_Transmit_FS(deq.first, deq.second);
+  
 }
 
 // to talk to UART minicom --baudrate 115200 --device /dev/ttyUSB0 
@@ -150,12 +184,12 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
   }
 
-  UART_send_from_buffer();
+  UART_send_from_buffer(uart_queue);
 }
 
 void HAL_UART_RxCpltCallback (UART_HandleTypeDef *huart)
 {
-  num_rx_rounds++;
+  uart_rx_queue.num_rounds++;
 
   // don't need to do anything. DMA is circular
 
@@ -201,11 +235,7 @@ int main(void)
   MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_DMA(&huart1, received, sizeof(received)-3);
-
-  for(int i=0; i<sizeof(saved); i++) {
-    saved[i] = 42;
-  }
+  HAL_UART_Receive_DMA(&huart1, uart_rx_queue.tosend, sizeof(uart_rx_queue.tosend));
   
   /* USER CODE END 2 */
 
@@ -215,6 +245,9 @@ int main(void)
   uint32_t lasttime = 0;
   uint8_t uartmessage[] = "periodic uart\n";
   uint8_t usbmessage[]  = "periodic usb\n";
+  UNUSED(uartmessage);
+  UNUSED(usbmessage);
+  
   uint8_t  blinkstate = 0;
   while (1)
   {
@@ -230,10 +263,8 @@ int main(void)
       //HAL_UART_Transmit_IT(&huart1, uartmessage, sizeof(uartmessage));
     }
     
-    //CDC_Transmit_FS(usbmessage, sizeof(usbmessage));
-    while(CDC_GetTxState()) { /* empty */ }
-    CDC_Transmit_FS(received, sizeof(received));
-
+    ProcessReceivedUart();
+    
     if (blinkstate) {
       GPIOC->ODR |= GPIO_PIN_13;
     } else {
@@ -315,7 +346,7 @@ void SystemClock_Config(void)
   * @param  None
   * @retval None
   */
-void _Error_Handler(char * file, int line)
+void _Error_Handler(const char * file, int line)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */

@@ -57,7 +57,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 PCD_HandleTypeDef hpcd_USB_FS;
-void _Error_Handler(char * file, int line);
+void _Error_Handler(const char * file, int line);
 
 /* USER CODE BEGIN 0 */
 /* USER CODE END 0 */

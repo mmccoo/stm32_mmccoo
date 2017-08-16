@@ -58,12 +58,23 @@
 
 /* USER CODE BEGIN Private defines */
 
-void SendUART(uint8_t *data, uint32_t length);
+
 
 /* USER CODE END Private defines */
+#ifdef __cplusplus
+ extern "C" {
+#endif
 
-void _Error_Handler(char *, int);
+   // This is in extern c because c files want to call this function.
+   void SendUART(uint8_t *data, uint32_t length);
+   void _Error_Handler(const char *, int);
 
+#ifdef __cplusplus
+}
+#endif
+
+
+   
 #define Error_Handler() _Error_Handler(__FILE__, __LINE__)
 
 /**
