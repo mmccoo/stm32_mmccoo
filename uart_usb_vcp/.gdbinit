@@ -17,5 +17,17 @@ monitor reset halt
 monitor stm32f1x mass_erase 0
 monitor program build/uart_usb_vcp.elf verify
 monitor reset halt
-break main
+#break main
+
+
+# break main.c:93
+# commands
+#   silent
+#   printf "send1 %d %d %s\n", tosend_begin, end-tosend_begin, (tosend+tosend_begin)[0]@(end-tosend_begin)
+#   continue
+# end
+
+#ignore $bpnum 1
+
+
 continue

@@ -61,10 +61,12 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-uint8_t received[] = "                            \n\r";
-uint8_t tosend[50];
+uint8_t received[] = "                                                                                            \n\r";
+uint8_t tosend[512];
 uint32_t tosend_begin = 0;
 uint32_t tosend_end = 0;
+uint8_t saved[4096];
+uint32_t numsaved=0;
 
 uint8_t num_rx_rounds = 0;
 
@@ -84,11 +86,16 @@ void SystemClock_Config(void);
 void UART_send_from_buffer()
 {
   if (tosend_begin == tosend_end) { return; }
+
+  HAL_UART_StateTypeDef state = HAL_UART_GetState(&huart1);
+  if (state != HAL_UART_STATE_READY  &&
+      state != HAL_UART_STATE_BUSY_RX) { return; }
   
-  if (tosend_begin < tosend_end) {
+  uint32_t end = tosend_end;
+  if (tosend_begin < end) {
     // begin is before end. haven't wrapped.
-    HAL_UART_Transmit_DMA(&huart1, tosend+tosend_begin, tosend_end-tosend_begin);
-    tosend_begin = tosend_end;
+    HAL_UART_Transmit_DMA(&huart1, tosend+tosend_begin, end-tosend_begin);
+    tosend_begin = end;
   } else {
     // wrapping.
     HAL_UART_Transmit_DMA(&huart1, tosend+tosend_begin, sizeof(tosend)-tosend_begin);
@@ -101,18 +108,33 @@ void enqueue(uint8_t *data, uint32_t length)
 {
   for(int i=0; i<length; i++) {
     tosend[tosend_end] = data[i];
+    saved[numsaved] = data[i];
     tosend_end++;
+    numsaved++;
     if (tosend_end>=sizeof(tosend)) {
       tosend_end = 0;
+      tosend[tosend_end] = 'x';
+      tosend_end++;
+      saved[numsaved] = 'x';
+      numsaved++;
     }
     tosend[tosend_end] = 0;
+    saved[numsaved] = 0;
   }
+
 }
+
+// from the terminal that I'm using, the data comes in two chunks
+// the first is the data to be send.
+// the second is a return and newline
 void SendUART(uint8_t *data, uint32_t length)
 {
   enqueue(data, length);
-  uint8_t extra[] = "\r\n";
-  enqueue(extra, sizeof(extra));
+  // don't need to add the newline stuff if the stuff we're echoing is
+  // already newlined.
+  uint8_t extra[] = "x\n\r";
+  // need the -1 because sizeof also needs the extra null termination.
+  enqueue(extra, sizeof(extra)-1);
   
   UART_send_from_buffer();
 
@@ -181,7 +203,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_DMA(&huart1, received, sizeof(received)-3);
 
-  
+  for(int i=0; i<sizeof(saved); i++) {
+    saved[i] = 42;
+  }
   
   /* USER CODE END 2 */
 
@@ -206,7 +230,7 @@ int main(void)
       //HAL_UART_Transmit_IT(&huart1, uartmessage, sizeof(uartmessage));
     }
     
-    CDC_Transmit_FS(usbmessage, sizeof(usbmessage));
+    //CDC_Transmit_FS(usbmessage, sizeof(usbmessage));
     while(CDC_GetTxState()) { /* empty */ }
     CDC_Transmit_FS(received, sizeof(received));
 
