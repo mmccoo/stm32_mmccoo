@@ -55,7 +55,7 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-u8g2_t u8g2;
+u8g2_t u8g2_iic;
 
 #define UNUSEDVAR __attribute__ ((unused))
 
@@ -423,6 +423,85 @@ void HAL_SYSTICK_Callback(void)
   }
 }
 
+void Refresh_OLED(int phase)
+{
+  u8g2_ClearBuffer(&u8g2_iic);
+  uint32_t curtime = HAL_GetTick();
+
+  int pagenum = 0;
+  u8g2_FirstPage(&u8g2_iic);
+  do {
+    pagenum++;
+    
+    switch (phase) {
+    case 0:
+      u8g2_SetFont(&u8g2_iic, u8g2_font_ncenB14_tr);
+      u8g2_DrawStr(&u8g2_iic, 0,24,"Hi World!");
+      break;
+
+    case 1:
+      //u8g2_DrawBox(&u8g2_iic, 10,20, 20, 30);
+      u8g2_SetFont(&u8g2_iic, u8g2_font_ncenB14_tr);
+      //u8g2_DrawStr(&u8g2_iic, 0,15,"This World!");
+      //u8g2_DrawStr(&u8g2_iic, 0,30,"Other World!");
+      //u8g2_DrawXBM(&u8g2_iic, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
+
+      // set color to zero. the bitmap I have would otherwise be negative.
+      u8g2_SetDrawColor(&u8g2_iic, 0);
+      u8g2_DrawXBM(&u8g2_iic, 0, 0, lydia_width, lydia_height, lydia_bits);
+      u8g2_DrawXBM(&u8g2_iic, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
+      break;
+
+    case 2:
+      u8g2_SetDrawColor(&u8g2_iic, 1);
+      u8g2_SetFontMode(&u8g2_iic, 1);	// Transparent
+      u8g2_SetFontDirection(&u8g2_iic, 0);
+      u8g2_SetFont(&u8g2_iic, u8g2_font_inb24_mf);
+      u8g2_DrawStr(&u8g2_iic, 0, 30, "U");
+    
+      u8g2_SetFontDirection(&u8g2_iic, 1);
+      u8g2_SetFont(&u8g2_iic, u8g2_font_inb30_mn);
+      u8g2_DrawStr(&u8g2_iic, 21,8,"8");
+        
+      u8g2_SetFontDirection(&u8g2_iic, 0);
+      u8g2_SetFont(&u8g2_iic, u8g2_font_inb24_mf);
+      u8g2_DrawStr(&u8g2_iic, 51,30,"g");
+      u8g2_DrawStr(&u8g2_iic, 67,30,"\xb2");
+    
+      u8g2_DrawHLine(&u8g2_iic, 2, 35, 47);
+      u8g2_DrawHLine(&u8g2_iic, 3, 36, 47);
+      u8g2_DrawVLine(&u8g2_iic, 45, 32, 12);
+      u8g2_DrawVLine(&u8g2_iic, 46, 33, 12);
+  
+      u8g2_SetFont(&u8g2_iic, u8g2_font_4x6_tr);
+      u8g2_DrawStr(&u8g2_iic, 1,54,"github.com/olikraus/u8g2");
+      break;
+
+    case 3: {
+      u8g2_SetDrawColor(&u8g2_iic, 1);
+      u8g2_SetFontMode(&u8g2_iic, 1);	// Transparent
+      u8g2_SetFontDirection(&u8g2_iic, 0);
+      u8g2_SetFont(&u8g2_iic, u8g2_font_inb16_mf);
+      char time[] = "xxxxx";
+      itoa(curtime,(uint8_t*) time);
+
+      u8g2_DrawStr(&u8g2_iic, 0, 16, time);
+      break;
+    }
+    default:
+      break;
+
+    }
+  
+    //NextPage calls SendBuffer
+    u8g2_SendBuffer(&u8g2_iic);
+
+    // when drawing the time, lets just do the first two pages
+    if (phase==3 && pagenum>=2) { return; }
+  } while ( u8g2_NextPage(&u8g2_iic) );
+
+}
+
 /* USER CODE END 0 */
 
 int main(void)
@@ -469,66 +548,15 @@ int main(void)
   UNUSEDVAR uint8_t spi_poll = 1;
   //uint8_t text_size = 0;
 
-  u8g2_Setup_ssd1306_i2c_128x64_noname_1(&u8g2,
+  u8g2_Setup_ssd1306_i2c_128x64_noname_1(&u8g2_iic,
                                          U8G2_R0,
                                          u8x8_byte_my_hw_i2c,
                                          u8x8_gpio_and_delay_mine);
   
-  u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this,
+  u8g2_InitDisplay(&u8g2_iic); // send init sequence to the display, display is in sleep mode after this,
+  u8g2_SetPowerSave(&u8g2_iic, 0); // wake up display
   { uint8_t umsg[] = "done with init\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
-  u8g2_SetPowerSave(&u8g2, 0); // wake up display
-  { uint8_t umsg[] = "first page\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
 
-#if 0
-  u8g2_FirstPage(&u8g2);
-  do {
-    { uint8_t umsg[] = "set font\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
-    u8g2_SetFont(&u8g2, u8g2_font_ncenB14_tr);
-    { uint8_t umsg[] = "draw hello\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
-    u8g2_DrawStr(&u8g2, 0,24,"Hi World!");
-    { uint8_t umsg[] = "done\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
-  } while ( u8g2_NextPage(&u8g2) );
-#endif
-
-#if 1
-  //u8g2_FirstPage(&u8g2);
-  //do {
-  //u8g2_DrawBox(&u8g2, 10,20, 20, 30);
-  u8g2_SetFont(&u8g2, u8g2_font_ncenB14_tr);
-  //u8g2_DrawStr(&u8g2, 0,15,"This World!");
-  //u8g2_DrawStr(&u8g2, 0,30,"Other World!");
-  //u8g2_DrawXBM(&u8g2, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
-  u8g2_SetDrawColor(&u8g2, 0);
-  u8g2_DrawXBM(&u8g2, 0, 0, lydia_width, lydia_height, lydia_bits);
-  u8g2_DrawXBM(&u8g2, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
-#endif
-
-#if 0
-  u8g2_SetFontMode(&u8g2, 1);	// Transparent
-  u8g2_SetFontDirection(&u8g2, 0);
-  u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
-  u8g2_DrawStr(&u8g2, 0, 30, "U");
-    
-  u8g2_SetFontDirection(&u8g2, 1);
-  u8g2_SetFont(&u8g2, u8g2_font_inb30_mn);
-  u8g2_DrawStr(&u8g2, 21,8,"8");
-        
-  u8g2_SetFontDirection(&u8g2, 0);
-  u8g2_SetFont(&u8g2, u8g2_font_inb24_mf);
-  u8g2_DrawStr(&u8g2, 51,30,"g");
-  u8g2_DrawStr(&u8g2, 67,30,"\xb2");
-    
-  u8g2_DrawHLine(&u8g2, 2, 35, 47);
-  u8g2_DrawHLine(&u8g2, 3, 36, 47);
-  u8g2_DrawVLine(&u8g2, 45, 32, 12);
-  u8g2_DrawVLine(&u8g2, 46, 33, 12);
-  
-  u8g2_SetFont(&u8g2, u8g2_font_4x6_tr);
-  u8g2_DrawStr(&u8g2, 1,54,"github.com/olikraus/u8g2");
-#endif
-    
-  u8g2_SendBuffer(&u8g2);
-  //} while ( u8g2_NextPage(&u8g2) );
 
   UNUSEDVAR uint32_t myfreq = HAL_RCC_GetSysClockFreq();
   UNUSEDVAR uint32_t mysize = * (uint32_t*) FLASHSIZE_BASE;
@@ -549,25 +577,8 @@ int main(void)
 
     //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
 
-    u8g2_ClearBuffer(&u8g2);
-    u8g2_FirstPage(&u8g2);
-    UNUSEDVAR uint32_t cleartime = HAL_GetTick();
+    Refresh_OLED((curtime/1000) % 4);
 
-    u8g2_SetDrawColor(&u8g2, 1);
-    u8g2_SetFontMode(&u8g2, 1);	// Transparent
-    u8g2_SetFontDirection(&u8g2, 0);
-    u8g2_SetFont(&u8g2, u8g2_font_inb16_mf);
-    char time[] = "xxxxx";
-    itoa(curtime,(uint8_t*) time);
-
-    amountsent=0;
-    uint8_t pages = 2;
-    do {
-      u8g2_DrawStr(&u8g2, 0, 16, time);
-      //NextPage calls SendBuffer
-      //u8g2_SendBuffer(&u8g2);
-      pages--;
-    } while (u8g2_NextPage(&u8g2) && pages>0);
     UNUSEDVAR uint32_t finaltime = HAL_GetTick();
     UNUSEDVAR uint32_t elapsed =  finaltime-curtime;
     if (HAL_UART_GetState(&huart1) == HAL_UART_STATE_READY) {
