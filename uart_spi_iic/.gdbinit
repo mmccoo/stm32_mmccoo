@@ -26,7 +26,8 @@ monitor reset halt
 end
 
 reload
-break main
+#break main
+
 #break Src/stm32f1xx_hal_i2c.c:340
 #break u8x8_gpio_and_delay_mine
 #break u8x8_byte_my_hw_i2c

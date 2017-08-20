@@ -56,6 +56,7 @@
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 u8g2_t u8g2_iic;
+u8g2_t u8g2_spi;
 
 #define UNUSEDVAR __attribute__ ((unused))
 
@@ -180,7 +181,7 @@ void SystemClock_Config(void);
 
 /* USER CODE BEGIN 0 */
 void delayLoop() {
-        volatile uint32_t delayCount = 100000; // volatile, um "Wegoptimieren" zu vermeinden
+        volatile uint32_t delayCount = 10000; // volatile, um "Wegoptimieren" zu vermeinden
                                                //(http://en.wikipedia.org/wiki/Volatile_variable)
         while (delayCount > 0) {
                 delayCount--;
@@ -350,6 +351,99 @@ u8x8_byte_my_hw_i2c(
   return 1;
 }
 
+
+// a typical sequence for init display
+// U8X8_MSG_BYTE_INIT
+
+uint8_t
+u8x8_byte_my_hw_spi(
+  U8X8_UNUSED u8x8_t *u8x8,
+  U8X8_UNUSED uint8_t msg,
+  U8X8_UNUSED uint8_t arg_int,
+  U8X8_UNUSED void *arg_ptr)
+{
+  const uint8_t senduart = 0;
+  
+  U8X8_UNUSED uint8_t *args = arg_ptr;
+  switch(msg)  {
+  case U8X8_MSG_BYTE_SEND: {
+    while(HAL_SPI_GetState (&hspi1) != HAL_SPI_STATE_READY) { /* empty */ }
+    HAL_SPI_Transmit (&hspi1, arg_ptr, arg_int, HAL_MAX_DELAY);
+    amountsent+= arg_int;
+
+    if (senduart) {
+      uint8_t umsg[] = "MSG_BYTE_SEND xxx\n";
+      byte_at_string(umsg+14, arg_int);
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+#if 0
+    uint8_t umsg[] = "MSG_BYTE_SEND 0xxx\n";
+    // 00 AE = display off
+    // 00 D5 = set display clock
+    // 00 80    divide ratio
+    // 00 A8 = set multiplex ratio
+    // 00 3F    64 mux
+    // 00 D3 = set display offset
+    // 00 00
+    // 00 40 - 00 7F set display start line
+    
+    
+    hex_at_string(umsg+16, args[0]);
+    sendUARTmsgPoll(umsg, sizeof(umsg));
+#endif
+    break;
+  }
+  case U8X8_MSG_BYTE_INIT: {
+    if (senduart) {
+      uint8_t umsg[] = "MSG_BYTE_INIT xxx\n";
+      byte_at_string(umsg+14, arg_int);
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+    break;
+  }
+  case U8X8_MSG_BYTE_SET_DC: {
+    if (arg_int) {
+      GPIOA->BSRR = GPIO_BSRR_BS4;
+    } else {
+      GPIOA->BSRR = GPIO_BSRR_BR4;
+    }
+    if (senduart) {
+      uint8_t umsg[] = "MSG_BYTE_SET_DC xxx\n";
+      byte_at_string(umsg+16, arg_int);
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+    break;
+  }
+  case U8X8_MSG_BYTE_START_TRANSFER: {
+    GPIOA->BSRR = GPIO_BSRR_BR3;
+
+    if (senduart) {
+      UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_START\n";
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+    break;
+  }
+  case U8X8_MSG_BYTE_END_TRANSFER: {
+    GPIOA->BSRR = GPIO_BSRR_BS3;
+    if (senduart) {
+      UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_END\n";
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+    break;
+  }
+  default: {
+    if (senduart) {
+      uint8_t umsg[] = "MSG_BYTE_DEFAULT xxx\n";
+      byte_at_string(umsg+17, arg_int);
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+    return 0;
+  }
+  }
+  return 1;
+}
+
+
 uint8_t u8x8_gpio_and_delay_mine(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
   UNUSEDVAR uint8_t umsg[] = "calling gpio and delay\n";
@@ -423,69 +517,88 @@ void HAL_SYSTICK_Callback(void)
   }
 }
 
-void Refresh_OLED(int phase)
+typedef enum {
+  HI_WORLD,
+  LYDIA_PIC,
+  STOCK_U8G2,
+  TIMECODE,
+  LAST_IMG 
+} IMGS;
+
+void Refresh_OLED(IMGS img, int usespi)
 {
-  u8g2_ClearBuffer(&u8g2_iic);
+  u8g2_t *u8g2;
+
+  if (usespi) {
+    u8g2 = &u8g2_spi;
+  } else {
+    u8g2 = &u8g2_iic;
+  }
+  u8g2_ClearBuffer(u8g2);
   uint32_t curtime = HAL_GetTick();
 
+  while(HAL_SPI_GetState (&hspi1) != HAL_SPI_STATE_READY) { /* empty */ }
+
+  
   int pagenum = 0;
-  u8g2_FirstPage(&u8g2_iic);
+  u8g2_FirstPage(u8g2);
   do {
     pagenum++;
-    
-    switch (phase) {
-    case 0:
-      u8g2_SetFont(&u8g2_iic, u8g2_font_ncenB14_tr);
-      u8g2_DrawStr(&u8g2_iic, 0,24,"Hi World!");
+
+    //u8g2_SetContrast(u8g2, 255);
+    switch (img) {
+    case HI_WORLD:
+      u8g2_SetFont(u8g2, u8g2_font_ncenB14_tr);
+      u8g2_DrawStr(u8g2, 0,24,"Hi World!");
       break;
 
-    case 1:
-      //u8g2_DrawBox(&u8g2_iic, 10,20, 20, 30);
-      u8g2_SetFont(&u8g2_iic, u8g2_font_ncenB14_tr);
-      //u8g2_DrawStr(&u8g2_iic, 0,15,"This World!");
-      //u8g2_DrawStr(&u8g2_iic, 0,30,"Other World!");
-      //u8g2_DrawXBM(&u8g2_iic, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
+    case LYDIA_PIC:
+      //u8g2_DrawBox(u8g2, 10,20, 20, 30);
+      u8g2_SetFont(u8g2, u8g2_font_ncenB14_tr);
+      //u8g2_DrawStr(u8g2, 0,15,"This World!");
+      //u8g2_DrawStr(u8g2, 0,30,"Other World!");
+      //u8g2_DrawXBM(u8g2, 0, 20, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT, logo16_glcd_bmp);
 
       // set color to zero. the bitmap I have would otherwise be negative.
-      u8g2_SetDrawColor(&u8g2_iic, 0);
-      u8g2_DrawXBM(&u8g2_iic, 0, 0, lydia_width, lydia_height, lydia_bits);
-      u8g2_DrawXBM(&u8g2_iic, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
+      u8g2_SetDrawColor(u8g2, 0);
+      u8g2_DrawXBM(u8g2, 0, 0, lydia_width, lydia_height, lydia_bits);
+      u8g2_DrawXBM(u8g2, 64, 0, xlogo64_width, xlogo64_height, xlogo64_bits);
       break;
 
-    case 2:
-      u8g2_SetDrawColor(&u8g2_iic, 1);
-      u8g2_SetFontMode(&u8g2_iic, 1);	// Transparent
-      u8g2_SetFontDirection(&u8g2_iic, 0);
-      u8g2_SetFont(&u8g2_iic, u8g2_font_inb24_mf);
-      u8g2_DrawStr(&u8g2_iic, 0, 30, "U");
+    case STOCK_U8G2:
+      u8g2_SetDrawColor(u8g2, 1);
+      u8g2_SetFontMode(u8g2, 1);	// Transparent
+      u8g2_SetFontDirection(u8g2, 0);
+      u8g2_SetFont(u8g2, u8g2_font_inb24_mf);
+      u8g2_DrawStr(u8g2, 0, 30, "U");
     
-      u8g2_SetFontDirection(&u8g2_iic, 1);
-      u8g2_SetFont(&u8g2_iic, u8g2_font_inb30_mn);
-      u8g2_DrawStr(&u8g2_iic, 21,8,"8");
+      u8g2_SetFontDirection(u8g2, 1);
+      u8g2_SetFont(u8g2, u8g2_font_inb30_mn);
+      u8g2_DrawStr(u8g2, 21,8,"8");
         
-      u8g2_SetFontDirection(&u8g2_iic, 0);
-      u8g2_SetFont(&u8g2_iic, u8g2_font_inb24_mf);
-      u8g2_DrawStr(&u8g2_iic, 51,30,"g");
-      u8g2_DrawStr(&u8g2_iic, 67,30,"\xb2");
+      u8g2_SetFontDirection(u8g2, 0);
+      u8g2_SetFont(u8g2, u8g2_font_inb24_mf);
+      u8g2_DrawStr(u8g2, 51,30,"g");
+      u8g2_DrawStr(u8g2, 67,30,"\xb2");
     
-      u8g2_DrawHLine(&u8g2_iic, 2, 35, 47);
-      u8g2_DrawHLine(&u8g2_iic, 3, 36, 47);
-      u8g2_DrawVLine(&u8g2_iic, 45, 32, 12);
-      u8g2_DrawVLine(&u8g2_iic, 46, 33, 12);
+      u8g2_DrawHLine(u8g2, 2, 35, 47);
+      u8g2_DrawHLine(u8g2, 3, 36, 47);
+      u8g2_DrawVLine(u8g2, 45, 32, 12);
+      u8g2_DrawVLine(u8g2, 46, 33, 12);
   
-      u8g2_SetFont(&u8g2_iic, u8g2_font_4x6_tr);
-      u8g2_DrawStr(&u8g2_iic, 1,54,"github.com/olikraus/u8g2");
+      u8g2_SetFont(u8g2, u8g2_font_4x6_tr);
+      u8g2_DrawStr(u8g2, 1,54,"github.com/olikraus/u8g2");
       break;
 
-    case 3: {
-      u8g2_SetDrawColor(&u8g2_iic, 1);
-      u8g2_SetFontMode(&u8g2_iic, 1);	// Transparent
-      u8g2_SetFontDirection(&u8g2_iic, 0);
-      u8g2_SetFont(&u8g2_iic, u8g2_font_inb16_mf);
+    case TIMECODE: {
+      u8g2_SetDrawColor(u8g2, 1);
+      u8g2_SetFontMode(u8g2, 1);	// Transparent
+      u8g2_SetFontDirection(u8g2, 0);
+      u8g2_SetFont(u8g2, u8g2_font_inb16_mf);
       char time[] = "xxxxx";
       itoa(curtime,(uint8_t*) time);
 
-      u8g2_DrawStr(&u8g2_iic, 0, 16, time);
+      u8g2_DrawStr(u8g2, 0, 16, time);
       break;
     }
     default:
@@ -494,11 +607,13 @@ void Refresh_OLED(int phase)
     }
   
     //NextPage calls SendBuffer
-    u8g2_SendBuffer(&u8g2_iic);
+    u8g2_SendBuffer(u8g2);
 
     // when drawing the time, lets just do the first two pages
-    if (phase==3 && pagenum>=2) { return; }
-  } while ( u8g2_NextPage(&u8g2_iic) );
+    if (img==TIMECODE && pagenum>=2) {
+      return;
+    }
+  } while ( u8g2_NextPage(u8g2) );
 
 }
 
@@ -547,14 +662,30 @@ int main(void)
   UNUSEDVAR uint8_t uart_poll = 1;
   UNUSEDVAR uint8_t spi_poll = 1;
   //uint8_t text_size = 0;
-
+  uint8_t phase = 0;
+  
   u8g2_Setup_ssd1306_i2c_128x64_noname_1(&u8g2_iic,
                                          U8G2_R0,
                                          u8x8_byte_my_hw_i2c,
                                          u8x8_gpio_and_delay_mine);
-  
   u8g2_InitDisplay(&u8g2_iic); // send init sequence to the display, display is in sleep mode after this,
   u8g2_SetPowerSave(&u8g2_iic, 0); // wake up display
+
+
+  // reset the spi oled
+  GPIOA->BSRR = GPIO_BSRR_BR2;
+  delayLoop();
+  GPIOA->BSRR = GPIO_BSRR_BS2;
+  
+  u8g2_Setup_ssd1306_128x64_noname_f(&u8g2_spi,
+                                         U8G2_R0,
+                                         u8x8_byte_my_hw_spi,
+                                         u8x8_gpio_and_delay_mine);
+  
+  u8g2_InitDisplay(&u8g2_spi); // send init sequence to the display, display is in sleep mode after this,
+  u8g2_SetPowerSave(&u8g2_spi, 0); // wake up display
+
+
   { uint8_t umsg[] = "done with init\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
 
 
@@ -577,7 +708,11 @@ int main(void)
 
     //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
 
-    Refresh_OLED((curtime/1000) % 4);
+  
+    
+    //Refresh_OLED(phase, 0);
+    Refresh_OLED(TIMECODE, 1);
+    phase = (phase+1)%4;
 
     UNUSEDVAR uint32_t finaltime = HAL_GetTick();
     UNUSEDVAR uint32_t elapsed =  finaltime-curtime;
