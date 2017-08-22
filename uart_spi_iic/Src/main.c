@@ -57,6 +57,9 @@
 /* Private variables ---------------------------------------------------------*/
 u8g2_t u8g2_iic;
 u8g2_t u8g2_spi;
+u8g2_t u8g2_nokia;
+
+const uint32_t update_interval = 1000/60;
 
 #define UNUSEDVAR __attribute__ ((unused))
 
@@ -355,12 +358,17 @@ u8x8_byte_my_hw_i2c(
 // a typical sequence for init display
 // U8X8_MSG_BYTE_INIT
 
+
 uint8_t
 u8x8_byte_my_hw_spi(
   U8X8_UNUSED u8x8_t *u8x8,
   U8X8_UNUSED uint8_t msg,
   U8X8_UNUSED uint8_t arg_int,
-  U8X8_UNUSED void *arg_ptr)
+  U8X8_UNUSED void *arg_ptr,
+  GPIO_TypeDef *CSPORT,
+  uint32_t      CSSET,
+  uint32_t      CSRESET
+  )
 {
   const uint8_t senduart = 0;
   
@@ -376,21 +384,20 @@ u8x8_byte_my_hw_spi(
       byte_at_string(umsg+14, arg_int);
       sendUARTmsgPoll(umsg, sizeof(umsg));
     }
-#if 0
-    uint8_t umsg[] = "MSG_BYTE_SEND 0xxx\n";
-    // 00 AE = display off
-    // 00 D5 = set display clock
-    // 00 80    divide ratio
-    // 00 A8 = set multiplex ratio
-    // 00 3F    64 mux
-    // 00 D3 = set display offset
-    // 00 00
-    // 00 40 - 00 7F set display start line
-    
-    
-    hex_at_string(umsg+16, args[0]);
-    sendUARTmsgPoll(umsg, sizeof(umsg));
-#endif
+    if (senduart) {
+      uint8_t umsg[] = "MSG_BYTE_SEND 0xxx\n";
+      // 00 AE = display off
+      // 00 D5 = set display clock
+      // 00 80    divide ratio
+      // 00 A8 = set multiplex ratio
+      // 00 3F    64 mux
+      // 00 D3 = set display offset
+      // 00 00
+      // 00 40 - 00 7F set display start line
+      hex_at_string(umsg+16, args[0]);
+      sendUARTmsgPoll(umsg, sizeof(umsg));
+    }
+
     break;
   }
   case U8X8_MSG_BYTE_INIT: {
@@ -415,7 +422,7 @@ u8x8_byte_my_hw_spi(
     break;
   }
   case U8X8_MSG_BYTE_START_TRANSFER: {
-    GPIOA->BSRR = GPIO_BSRR_BR3;
+    CSPORT->BSRR = CSRESET;
 
     if (senduart) {
       UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_START\n";
@@ -424,7 +431,7 @@ u8x8_byte_my_hw_spi(
     break;
   }
   case U8X8_MSG_BYTE_END_TRANSFER: {
-    GPIOA->BSRR = GPIO_BSRR_BS3;
+    CSPORT->BSRR = CSSET;
     if (senduart) {
       UNUSEDVAR uint8_t umsg[] = "MSG_BYTE_END\n";
       sendUARTmsgPoll(umsg, sizeof(umsg));
@@ -441,6 +448,28 @@ u8x8_byte_my_hw_spi(
   }
   }
   return 1;
+}
+
+
+uint8_t
+u8x8_byte_my_hw_spi_oled(
+  U8X8_UNUSED u8x8_t *u8x8,
+  U8X8_UNUSED uint8_t msg,
+  U8X8_UNUSED uint8_t arg_int,
+  U8X8_UNUSED void *arg_ptr)
+{
+  return u8x8_byte_my_hw_spi(u8x8, msg, arg_int, arg_ptr,
+                             OLED_CS_GPIO_Port, GPIO_BSRR_BS3, GPIO_BSRR_BR3);
+}
+uint8_t
+u8x8_byte_my_hw_spi_nokia(
+  U8X8_UNUSED u8x8_t *u8x8,
+  U8X8_UNUSED uint8_t msg,
+  U8X8_UNUSED uint8_t arg_int,
+  U8X8_UNUSED void *arg_ptr)
+{
+  return u8x8_byte_my_hw_spi(u8x8, msg, arg_int, arg_ptr,
+                             NOK_CS_GPIO_Port, GPIO_BSRR_BS1, GPIO_BSRR_BR1);
 }
 
 
@@ -525,15 +554,9 @@ typedef enum {
   LAST_IMG 
 } IMGS;
 
-void Refresh_OLED(IMGS img, int usespi)
-{
-  u8g2_t *u8g2;
 
-  if (usespi) {
-    u8g2 = &u8g2_spi;
-  } else {
-    u8g2 = &u8g2_iic;
-  }
+void Refresh_OLED(u8g2_t *u8g2, IMGS img)
+{
   u8g2_ClearBuffer(u8g2);
   uint32_t curtime = HAL_GetTick();
 
@@ -599,6 +622,9 @@ void Refresh_OLED(IMGS img, int usespi)
       itoa(curtime,(uint8_t*) time);
 
       u8g2_DrawStr(u8g2, 0, 16, time);
+
+      itoa((uint32_t) (curtime/(float) update_interval),(uint8_t*) time);
+      u8g2_DrawStr(u8g2, 0, 32, time);
       break;
     }
     default:
@@ -679,13 +705,20 @@ int main(void)
   
   u8g2_Setup_ssd1306_128x64_noname_f(&u8g2_spi,
                                          U8G2_R0,
-                                         u8x8_byte_my_hw_spi,
+                                         u8x8_byte_my_hw_spi_oled,
                                          u8x8_gpio_and_delay_mine);
   
   u8g2_InitDisplay(&u8g2_spi); // send init sequence to the display, display is in sleep mode after this,
   u8g2_SetPowerSave(&u8g2_spi, 0); // wake up display
 
+  u8g2_Setup_pcd8544_84x48_f(&u8g2_nokia,
+                             U8G2_R0,
+                             u8x8_byte_my_hw_spi_nokia,
+                             u8x8_gpio_and_delay_mine);
+  u8g2_InitDisplay(&u8g2_nokia); // send init sequence to the display, display is in sleep mode after this,
+  u8g2_SetPowerSave(&u8g2_nokia, 0); // wake up display
 
+  
   { uint8_t umsg[] = "done with init\n"; sendUARTmsgPoll(umsg, sizeof(umsg)); }
 
 
@@ -693,6 +726,7 @@ int main(void)
   UNUSEDVAR uint32_t mysize = * (uint32_t*) FLASHSIZE_BASE;
   UNUSEDVAR uint32_t myid   = * (uint32_t*) UID_BASE;
   
+  uint32_t last_update = 0;
   //InitOled();
   //OLED_Fill(0);
   uint8_t lasttime = 0;
@@ -709,10 +743,15 @@ int main(void)
     //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
 
   
+    if (curtime >= (last_update+update_interval)) {
+      Refresh_OLED(&u8g2_spi, phase);
+      Refresh_OLED(&u8g2_iic, phase);
+      Refresh_OLED(&u8g2_nokia, TIMECODE);
+      last_update = curtime;
+      phase = (phase+1)%4;
+    }
     
-    //Refresh_OLED(phase, 0);
-    Refresh_OLED(TIMECODE, 1);
-    phase = (phase+1)%4;
+
 
     UNUSEDVAR uint32_t finaltime = HAL_GetTick();
     UNUSEDVAR uint32_t elapsed =  finaltime-curtime;
