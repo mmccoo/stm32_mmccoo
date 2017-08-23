@@ -554,6 +554,27 @@ typedef enum {
   LAST_IMG 
 } IMGS;
 
+// strlen is: for each of sec,min,hour=6 and two :s=8 total
+void tick_to_time(uint32_t curtime, char str[8])
+{
+
+  uint8_t seconds = curtime/1000 % 60;
+  str[7] = '0' + (seconds % 10); 
+  str[6] = '0' + (seconds / 10);
+
+  str[5] = ':';
+  
+  uint8_t minutes = (curtime/1000 / 60) % 60;
+  str[4] = '0' + (minutes % 10);
+  str[3] = '0' + (minutes / 10);
+
+  str[2] = ':';
+  
+  uint8_t hours = (curtime/1000 / 60 / 60);
+  str[1] = '0' + (hours % 10);
+  str[0] = '0' + (hours / 10);
+
+}
 
 void Refresh_OLED(u8g2_t *u8g2, IMGS img)
 {
@@ -614,17 +635,24 @@ void Refresh_OLED(u8g2_t *u8g2, IMGS img)
       break;
 
     case TIMECODE: {
+      int y = 12;
       u8g2_SetDrawColor(u8g2, 1);
       u8g2_SetFontMode(u8g2, 1);	// Transparent
       u8g2_SetFontDirection(u8g2, 0);
-      u8g2_SetFont(u8g2, u8g2_font_inb16_mf);
-      char time[] = "xxxxx";
-      itoa(curtime,(uint8_t*) time);
+      u8g2_SetFont(u8g2, u8g2_font_9x15_mn);
+      char time[8];
+      tick_to_time(curtime, time);
+      u8g2_DrawStr(u8g2, 0, y, time);
 
-      u8g2_DrawStr(u8g2, 0, 16, time);
-
-      itoa((uint32_t) (curtime/(float) update_interval),(uint8_t*) time);
-      u8g2_DrawStr(u8g2, 0, 32, time);
+      const int fract_x = 7;
+      const int fract_y = 4;      
+      y+= fract_y;
+      
+      int fractional = (curtime % 1000) * 66 / 1000;
+      int x = (fractional%10)*fract_x;
+      y+= fractional/10*fract_y;
+      u8g2_DrawBox(u8g2, x, y, fract_x, fract_y);
+      
       break;
     }
     default:
@@ -641,6 +669,178 @@ void Refresh_OLED(u8g2_t *u8g2, IMGS img)
     }
   } while ( u8g2_NextPage(u8g2) );
 
+}
+
+typedef enum {
+  DIGIT_0 = 0x1,
+  DIGIT_1 = 0x2,
+  DIGIT_2 = 0x3,
+  DIGIT_3 = 0x4,
+  DIGIT_4 = 0x5,
+  DIGIT_5 = 0x6,
+  DIGIT_6 = 0x7,
+  DIGIT_7 = 0x8,
+
+  DECODE_MODE = 0x9,
+  INTENSITY   = 0xA,
+  SCAN_LIMIT  = 0xB,
+  SHUTDOWN    = 0xC,
+  DISPLAY_TEST= 0xF    
+} MAX7219_COMMAND;
+
+
+static inline
+void
+send_max7219_value(MAX7219_COMMAND cmd, uint8_t value)
+{
+  /* The data is then latched into either the digit or control
+     registers on the rising edge of LOAD/CS. LOAD/CS must go high
+     concurrently with or after the 16th rising clock edge, but before
+     the next rising clock edge or data will be lost. */
+
+  // with the BSRR registers, the lower 16 bits are set bits, the upper
+  // 16 are reset.
+  // reset CS pin
+  SEVEN_CS_GPIO_Port->BSRR = SEVEN_CS_Pin << 16;
+
+  // for the command (upper bits), then the value.
+  uint8_t command[2] = { cmd, value };
+  
+  while(HAL_SPI_GetState (&hspi1) != HAL_SPI_STATE_READY) { /* empty */ }
+  HAL_SPI_Transmit (&hspi1, command, sizeof(command), HAL_MAX_DELAY);
+  // set CS pin, causing a rising edge.
+  SEVEN_CS_GPIO_Port->BSRR = SEVEN_CS_Pin;
+
+  // Before the hardware reminded me that I need a CS edge for every command,
+  // I initially wrote this function to return a uint16. I then wanted to send
+  // all the bits a once. Being used to programming PCs on Intel architecture
+  // I got a lesson in endianness. With Intel, little endian, casting values
+  // works fine. in big endian, the bytes need to move around.
+  // Since I don't think this affected me before, I'm leaving these comment in.
+  // although we are sending 16 bit register values, the transmit
+  // function looks at 8 bit vales.
+  // since we're return a 16 bit value to a big endian system, the values
+  // need to be swapped.
+  // return (value << 8) | (cmd & 0xFF);
+}
+
+void
+seven_segment_init()
+{
+
+  /* Data bits are labeled D0–D15 (Table 1). D8–D11 contain the register
+     address. D0–D7 contain the data, and D12–D15 are “don’t care”
+     bits. The first received is D15, the most significant bit (MSB). */
+
+  /* D15-D12       D11-D8   D7-D0
+     Don't care    Address  MSB Data LSB */
+
+  /* Power up
+     On initial power-up, all control registers are reset, the display
+     is blanked, and the MAX7219/MAX7221 enter shutdown mode. Program the
+     display driver prior to display use. Otherwise, it will initially be
+     set to scan one digit, it will not decode data in the data registers,
+     and the intensity register will be set to its minimum value.
+  */
+
+  /* Decode mode
+     The decode-mode register sets BCD code B (0-9, E, H, L, P, and -)
+     or no-decode operation for each digit. Each bit in the register
+     corresponds to one digit. A logic high selects code B decoding
+     while logic low bypasses the decoder.
+
+     When the code B decode mode is used, the decoder looks only at
+     the lower nibble of the data in the digit registers (D3–D0),
+     disregarding bits D4–D6. D7, which sets the decimal point (SEG
+     DP), is independent of the decoder and is positive logic (D7 = 1
+     turns the decimal point on).
+
+     In decode mode, the values 0-9 will display 0-9.
+     the values 10-15 correspond to -,E,H,L,P,<blank>
+  */
+
+  // turn on decode mode for all 8.
+  send_max7219_value(DECODE_MODE, 0xFF);
+
+  /* intensity control
+     Digital control of display brightness is provided by an internal
+     pulse-width modulator, which is controlled by the lower nibble of
+     the intensity register. The modulator scales the average segment
+     current in 16 steps from a maximum of 31/32 down to 1/32 of the
+     peak current set by RS
+
+     for MAX7219
+     data value 0x0 corresponds to 1/32 on. 
+     intensity goes up in 2/32 increments.
+     up to 1/32+ 15*2/32 = 31/32 @ value 0xF
+  */
+
+  // set intensity to full
+  send_max7219_value(INTENSITY, 0x7);
+
+  /* scan-limit register
+     not doing anything interesting with this register.
+     setting it to scan all digits.
+     format is:
+     value 0 -> only scan digit 0
+     value N -> only scan digit 0-N
+     value 7 -> scan all.
+  */
+  send_max7219_value(SCAN_LIMIT, 0x7);
+
+  /* display-test register
+     value 0 - normal operation
+     value 1 - display test mode
+   */
+  send_max7219_value(DISPLAY_TEST, 0x0);
+
+  /* no-op register
+     The no-op register is used when cascading MAX7219s or
+     MAX7221s. Connect all devices’ LOAD/CS inputs together and
+     connect DOUT to DIN on adjacent devices.
+
+     For example, if four MAX7219s are cascaded, then to write to the
+     fourth chip, sent the desired 16-bit word, followed by three
+     no-op codes (hex 0xXX0X, see Table 2). When LOAD/CS goes high,
+     data is latched in all devices. The first three chips receive
+     no-op commands, and the fourth receives the intended data.
+  */
+  
+  
+  /* shutdown
+     When the MAX7219 is in shutdown mode, the scan oscil-lator is
+     halted, all segment current sources are pulled to ground, and
+     all digit drivers are pulled to V+, thereby blanking the
+     display.
+     Data in the digit and control registers remains
+     unaltered. Shutdown can be used to save power or as an alarm to
+     flash the display by successively entering and leaving shutdown
+     mode.
+     Typically, it takes less than 250μs for the MAX7219/ MAX7221 to
+     leave shutdown mode. The display driver can be programmed while
+     in shutdown mode, and shutdown mode can be overridden by the
+     display-test function.
+
+     Shutdown mode -    data = 0
+     normal operation - data = 1
+  */
+  send_max7219_value(SHUTDOWN, 0x1);
+
+
+ 
+}
+
+void
+seven_segment_display(uint8_t values[8])
+{
+  for(int i=0; i<8; i++) {
+    if ((i==2) || (i==4) || (i==6)) {
+      // position 7 is the decimal point.
+      send_max7219_value(DIGIT_0+i, values[i] | (1<<7));
+    } else {
+      send_max7219_value(DIGIT_0+i, values[i]);
+    }
+  }  
 }
 
 /* USER CODE END 0 */
@@ -689,6 +889,11 @@ int main(void)
   UNUSEDVAR uint8_t spi_poll = 1;
   //uint8_t text_size = 0;
   uint8_t phase = 0;
+
+  uint8_t seven_seg_values[8] = { 0, 1, 2, 3,
+                                  4, 5, 6, 7 };
+  seven_segment_init();
+  seven_segment_display(seven_seg_values);
   
   u8g2_Setup_ssd1306_i2c_128x64_noname_1(&u8g2_iic,
                                          U8G2_R0,
@@ -730,6 +935,7 @@ int main(void)
   //InitOled();
   //OLED_Fill(0);
   uint8_t lasttime = 0;
+  uint8_t do_oled_nok = 1;
   while (1)
   {
   /* USER CODE END WHILE */
@@ -742,17 +948,40 @@ int main(void)
 
     //OLED_ShowStr(0,3, (unsigned char*) "HelTec Automation", (text_size++ % 2));
 
-  
+
     if (curtime >= (last_update+update_interval)) {
-      Refresh_OLED(&u8g2_spi, phase);
-      Refresh_OLED(&u8g2_iic, phase);
-      Refresh_OLED(&u8g2_nokia, TIMECODE);
       last_update = curtime;
-      phase = (phase+1)%4;
+      
+      if (do_oled_nok) {
+        Refresh_OLED(&u8g2_spi, phase);
+        Refresh_OLED(&u8g2_iic, phase);
+        Refresh_OLED(&u8g2_nokia, TIMECODE);
+        phase = (phase+1)%4;
+      }
+
+      uint8_t values[8];
+      // decimal seconds
+      //values[0] = (curtime/10) % 10;  // milliseconds/10 is hundredth
+      //values[1] = (curtime/100) % 10; // milliseconds/100 is tenths.
+      int fractional = (curtime % 1000) * 66 / 1000;
+      values[0] = fractional % 10; // milliseconds/10 is hundredth
+      values[1] = fractional / 10; // milliseconds/100 is tenths.
+
+      uint8_t seconds = curtime/1000 % 60;
+      values[2] = seconds % 10; 
+      values[3] = seconds / 10;
+
+      uint8_t minutes = (curtime/1000 / 60) % 60;
+      values[4] = minutes % 10;
+      values[5] = minutes / 10;
+
+      uint8_t hours = (curtime/1000 / 60 / 60);
+      values[6] = hours % 10;
+      values[7] = hours / 10;
+
+      seven_segment_display(values);
     }
     
-
-
     UNUSEDVAR uint32_t finaltime = HAL_GetTick();
     UNUSEDVAR uint32_t elapsed =  finaltime-curtime;
     if (HAL_UART_GetState(&huart1) == HAL_UART_STATE_READY) {

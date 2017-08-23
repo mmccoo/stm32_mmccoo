@@ -46,6 +46,8 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define SEVEN_CS_Pin GPIO_PIN_0
+#define SEVEN_CS_GPIO_Port GPIOA
 #define NOK_CS_Pin GPIO_PIN_1
 #define NOK_CS_GPIO_Port GPIOA
 #define MYRESET_Pin GPIO_PIN_2
