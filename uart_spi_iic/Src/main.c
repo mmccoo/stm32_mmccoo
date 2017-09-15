@@ -59,7 +59,7 @@ u8g2_t u8g2_iic;
 u8g2_t u8g2_spi;
 u8g2_t u8g2_nokia;
 
-const uint32_t update_interval = 1000/60;
+const uint32_t update_interval = 1000;
 
 #define UNUSEDVAR __attribute__ ((unused))
 
@@ -551,7 +551,8 @@ typedef enum {
   LYDIA_PIC,
   STOCK_U8G2,
   TIMECODE,
-  LAST_IMG 
+  LINES,
+  LAST_IMG
 } IMGS;
 
 // strlen is: for each of sec,min,hour=6 and two :s=8 total
@@ -655,17 +656,30 @@ void Refresh_OLED(u8g2_t *u8g2, IMGS img)
       
       break;
     }
+
+    case LINES: {
+      int steps = 16;
+      int dx = 128/steps;
+      int dy = 64/steps;
+      int y = 0;
+      for(int x=0; x<128; x+=dx) {
+        u8g2_DrawLine(u8g2, x, 0, 127, y);
+        u8g2_DrawLine(u8g2, 127-x, 63, 0, 63-y);
+        y+=dy;     
+      }
+    }
+      
     default:
       break;
 
     }
   
     //NextPage calls SendBuffer
-    u8g2_SendBuffer(u8g2);
+    //u8g2_SendBuffer(u8g2);
 
     // when drawing the time, lets just do the first two pages
     if (img==TIMECODE && pagenum>=2) {
-      return;
+      //return;
     }
   } while ( u8g2_NextPage(u8g2) );
 
@@ -956,7 +970,7 @@ int main(void)
         Refresh_OLED(&u8g2_spi, phase);
         Refresh_OLED(&u8g2_iic, phase);
         Refresh_OLED(&u8g2_nokia, TIMECODE);
-        phase = (phase+1)%4;
+        phase = (phase+1)%LAST_IMG;
       }
 
       uint8_t values[8];

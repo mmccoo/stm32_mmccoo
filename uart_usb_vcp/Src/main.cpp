@@ -53,6 +53,7 @@
 #include "usb_device.h"
 #include "gpio.h"
 #include <utility>
+#include <queue>
 
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
@@ -113,6 +114,7 @@ struct Queue {
   }
 };
 
+std::queue<char> otherqueue;
 Queue uart_queue;
 Queue usb_queue;
 Queue uart_rx_queue;
