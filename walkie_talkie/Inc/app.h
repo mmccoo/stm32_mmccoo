@@ -7,7 +7,7 @@
 extern "C" {
 #endif
   void main_loop();
-
+  void app_init();
 #ifdef __cplusplus 
 }
 #endif

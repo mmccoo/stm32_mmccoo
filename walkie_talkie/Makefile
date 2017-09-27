@@ -84,7 +84,8 @@ Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c \
 Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pcd.c
 
 CPP_SOURCES = \
-Src/app.cpp
+Src/app.cpp \
+Src/ELECHOUSE_CC1101.cpp
 
 
 # ASM sources
