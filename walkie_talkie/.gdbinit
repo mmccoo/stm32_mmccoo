@@ -26,6 +26,7 @@ monitor reset halt
 end
 
 reload
-break main
-break HAL_UART_RxCpltCallback
+#break main
+#break HAL_UART_RxCpltCallback
+#break CDC_Receive_FS
 continue
