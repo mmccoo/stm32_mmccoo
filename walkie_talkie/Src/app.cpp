@@ -23,8 +23,12 @@ uint8_t lighton = 0;
 uint8_t state = 0;
 int32_t count = 0;
 
+// this queue is different from other queues in that it will give you
+// as much queued data as it can without wrapping the internal circular
+// buffer. If it gives you the data til the end of the buffer, the next
+// call will give the stuff at the beginning.
 struct Queue {
-  uint8_t  tosend[512];
+  uint8_t  tosend[128];
   uint32_t tosend_begin;
   uint32_t tosend_end;
   uint8_t  num_rounds;
@@ -45,34 +49,35 @@ struct Queue {
     }    
   }
 
-  std::pair<uint8_t*, uint32_t> dequeue() {
+  // returns begin/end pair.
+  std::pair<uint8_t*, uint8_t*> dequeue() {
     // enqueue may move uart_tosend_end forward. Since it's called
     // from an interrupt, it needs to be treated a volatile.
     // uart_tosend_begin is also changed here.
     uint32_t end = tosend_end;
     if (tosend_begin == end) {
-      return std::make_pair(tosend+tosend_begin, 0);
+      return std::make_pair(tosend+tosend_begin, tosend+end);
     }
     if (tosend_begin < end) {
       // begin is before end. haven't wrapped.
       // need to capture the current value of tosend_begin before changing it.
-      std::pair<uint8_t*, uint32_t> retval =
-        std::make_pair(tosend+tosend_begin, end-tosend_begin);
+      auto retval = std::make_pair(tosend+tosend_begin, tosend+end);
       tosend_begin = end;
       return retval;
     }
 
     // wrapping.
-    std::pair<uint8_t*, uint32_t> retval =
-      std::make_pair(tosend+tosend_begin, sizeof(tosend)-tosend_begin);
+    auto retval = std::make_pair(tosend+tosend_begin, tosend+sizeof(tosend));
     tosend_begin = 0;
     return retval;
   }
 };
 
-Queue uart_queue;
-Queue usb_queue;
+Queue uart_tx_queue;
 Queue uart_rx_queue;
+Queue cc1101_tx_queue;
+Queue cc1101_rx_queue;
+Queue usb_tx_queue;
 
 
 void UART_send_from_buffer(Queue &queue)
@@ -83,40 +88,56 @@ void UART_send_from_buffer(Queue &queue)
       state != HAL_UART_STATE_BUSY_RX) { return; }
 
   auto deq = queue.dequeue();
-  if (deq.second == 0) { return; }
+  if (deq.second == deq.first) { return; }
 
-  HAL_UART_Transmit_DMA(&huart1, deq.first, deq.second);
+  HAL_UART_Transmit_DMA(&huart1, deq.first, deq.second-deq.first);
 
 }
 
+void CC1101_send_from_buffer(Queue &queue)
+{
+  auto deq = queue.dequeue();
+  if (deq.second == deq.first) { return; }
+  
+  ELECHOUSE_cc1101.SendData(deq.first, deq.second-deq.first);
+  ELECHOUSE_cc1101.SetReceive();
+}
+
+void Usb_send_from_buffer(Queue &queue)
+{
+  if (CDC_GetTxState()) { return; }
+
+  auto deq = queue.dequeue();
+  if (deq.second == deq.first) { return; }
+
+  CDC_Transmit_FS(deq.first, deq.second-deq.first);
+}
 
 // from the terminal that I'm using, the data comes in two chunks
 // the first is the data to be send.
 // the second is a return and newline
-void SendUART(uint8_t *data, uint32_t length)
+void SendData(uint8_t *data, uint32_t length, DataSource source)
 {
-  uart_queue.enqueue(data, length);
-  // don't need to add the newline stuff if the stuff we're echoing is
-  // already newlined.
-  //uint8_t extra[] = "\n\r";
-  // need the -1 because sizeof also needs the extra null termination.
-  //uart_queue.enqueue(extra, sizeof(extra)-1);
-  
-  UART_send_from_buffer(uart_queue);
+  if (source != DSUart) {
+    uart_tx_queue.enqueue(data, length);
+    // don't need to add the newline stuff if the stuff we're echoing is
+    // already newlined.
+    //uint8_t extra[] = "\n\r";
+    // need the -1 because sizeof also needs the extra null termination.
+    //uart_tx_queue.enqueue(extra, sizeof(extra)-1);
+    
+    UART_send_from_buffer(uart_tx_queue);
+  }
 
-}
+  if (source != DSUsb) {
+    usb_tx_queue.enqueue(data, length);
+    Usb_send_from_buffer(usb_tx_queue);
+  }
 
-void ProcessReceivedUart()
-{
-  // see page 287 of RM0008
-  // CNDTR tells how much is left in the current DMA loop.
-  uart_rx_queue.tosend_end = sizeof(uart_rx_queue.tosend) - huart1.hdmarx->Instance->CNDTR;
-  
-  auto deq = uart_rx_queue.dequeue();
-  if (deq.second == 0) { return; }
-  
-  while(CDC_GetTxState()) { /* empty */ }
-  CDC_Transmit_FS(deq.first, deq.second);
+  if (source != DSCc1101) {
+    cc1101_tx_queue.enqueue(data, length);
+    CC1101_send_from_buffer(cc1101_tx_queue);
+  }
   
 }
 
@@ -174,7 +195,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
   }
 
-  UART_send_from_buffer(uart_queue);
+  UART_send_from_buffer(uart_tx_queue);
 }
 
 void HAL_UART_RxCpltCallback (UART_HandleTypeDef *huart)
@@ -199,31 +220,43 @@ void app_init()
 {
   ELECHOUSE_cc1101.Init();
   ELECHOUSE_cc1101.SetReceive();
-  HAL_UART_Receive_DMA(&huart1, uart_rx_queue.tosend, sizeof(uart_rx_queue.tosend));
   
+  HAL_UART_Receive_DMA(&huart1, uart_rx_queue.tosend, sizeof(uart_rx_queue.tosend));
+
+  UartTransmit("initialized\n\r");
 }
 
 void main_loop()
 {
 
   while (1) {
-    if ((HAL_GetTick() % 1000) == 0) {
-      ProcessReceivedUart();
-      ;
+    if ((HAL_GetTick() % 100) == 0) {
+
+      // see page 287 of RM0008
+      // CNDTR tells how much is left in the current DMA loop.
+      uart_rx_queue.tosend_end = sizeof(uart_rx_queue.tosend) - huart1.hdmarx->Instance->CNDTR;
+  
+      auto deq = uart_rx_queue.dequeue();
+      if (deq.second != deq.first) {
+        SendData(deq.first, deq.second-deq.first, DSUart);
+      }
+      
+      //if(CDC_GetTxState()) { return; }
+      //CDC_Transmit_FS(deq.first, deq.second-deq.first);
+  
+    }
+
+    if (0) {
+      const char msg[] = "hello uart\n\r";
+      UartTransmit(msg);
+      uint8_t msgusb[] = "hello usb\n\r";
+      CDC_Transmit_FS(msgusb, sizeof(msgusb));
     }
 
     if(ELECHOUSE_cc1101.CheckReceiveFlag()) {
       byte size=ELECHOUSE_cc1101.ReceiveData(RX_buffer);
-      UartTransmit("received ");
-      UartTransmit(std::to_string(size).c_str());
-      if (size>=sizeof(unsigned long)) {
-        unsigned long val = *(unsigned int *)RX_buffer;
-        ELECHOUSE_cc1101.SendData((byte*)&val,sizeof(val));
-        UartTransmit("value ");
-        UartTransmit(std::to_string(val).c_str());
-        
-        ELECHOUSE_cc1101.SetReceive();
-      }
+      ELECHOUSE_cc1101.SetReceive();
+      SendData(RX_buffer, size, DSCc1101);
     }
     
   }

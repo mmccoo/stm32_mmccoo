@@ -67,7 +67,7 @@ extern SPI_HandleTypeDef hspi1;
 
 /* USER CODE END Private defines */
 
-extern void _Error_Handler(char *, int);
+extern void _Error_Handler(const char *, int);
 
 void MX_SPI1_Init(void);
 

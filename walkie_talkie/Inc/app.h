@@ -10,7 +10,13 @@ extern "C" {
 #endif
   void main_loop();
   void app_init();
-  void SendUART(uint8_t *data, uint32_t length);
+
+  typedef enum {
+    DSUsb,
+    DSUart,
+    DSCc1101
+  } DataSource;
+  void SendData(uint8_t *data, uint32_t length, DataSource source);
 
 #ifdef __cplusplus 
 }
