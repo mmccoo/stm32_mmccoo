@@ -234,6 +234,9 @@ void main_loop()
 
       // see page 287 of RM0008
       // CNDTR tells how much is left in the current DMA loop.
+      // The circular DMA operation is initialized with a length/size of
+      // sizeof(queue). since CNDTR is the number remaining, size-CNDTR is
+      // how much has been transferred.
       uart_rx_queue.tosend_end = sizeof(uart_rx_queue.tosend) - huart1.hdmarx->Instance->CNDTR;
   
       auto deq = uart_rx_queue.dequeue();
